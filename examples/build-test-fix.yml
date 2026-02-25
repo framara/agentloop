@@ -1,0 +1,38 @@
+name: build-test-fix
+
+agents:
+  builder:
+    cli: claude-code
+    system: |
+      You are a senior engineer. Write clean, tested code.
+      When fixing issues, address each failing test specifically.
+
+steps:
+  - name: build
+    agent: builder
+    prompt: |
+      Implement the following feature:
+      {{ feature_spec }}
+
+  - name: lint
+    run: "npm run lint 2>&1 || true"
+
+  - name: test
+    run: "npm test 2>&1 || true"
+
+  - name: fix
+    agent: builder
+    prompt: |
+      Fix the following issues:
+
+      ## Lint Output:
+      {{ steps.lint.output }}
+
+      ## Test Output:
+      {{ steps.test.output }}
+
+      Fix every lint error and failing test.
+    loop:
+      until: steps.test.exitCode == 0
+      max: 5
+      on_max: fail

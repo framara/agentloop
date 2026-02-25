@@ -1,11 +1,23 @@
 import { execa } from "execa";
 
 /**
- * Get the git diff of uncommitted changes in the working directory.
+ * Get the git diff of changes in the working directory.
+ * When baseBranch is provided (worktree mode), returns cumulative diff
+ * from the base branch — this avoids returning empty diffs after auto-commits.
  */
-export async function getGitDiff(cwd: string): Promise<string> {
+export async function getGitDiff(cwd: string, baseBranch?: string): Promise<string> {
   try {
-    // Staged + unstaged changes
+    // Worktree mode: cumulative diff from the fork point
+    if (baseBranch) {
+      const { stdout } = await execa(
+        "git",
+        ["diff", `${baseBranch}...HEAD`],
+        { cwd }
+      );
+      return stdout || "(no changes from base branch)";
+    }
+
+    // Normal mode: staged + unstaged changes
     const { stdout: staged } = await execa("git", ["diff", "--cached"], { cwd });
     const { stdout: unstaged } = await execa("git", ["diff"], { cwd });
 
@@ -44,7 +56,8 @@ export async function getChangedFiles(cwd: string): Promise<string[]> {
 }
 
 /**
- * Create a snapshot commit so the auditor can see a clean diff.
+ * Create a snapshot commit if there are changes.
+ * Returns true if a commit was created, false if working tree was clean.
  */
 export async function snapshotCommit(
   cwd: string,
@@ -52,7 +65,9 @@ export async function snapshotCommit(
 ): Promise<boolean> {
   try {
     await execa("git", ["add", "-A"], { cwd });
-    await execa("git", ["commit", "-m", message, "--allow-empty"], { cwd });
+    const { stdout } = await execa("git", ["status", "--porcelain"], { cwd });
+    if (!stdout.trim()) return false;
+    await execa("git", ["commit", "-m", message], { cwd });
     return true;
   } catch {
     return false;

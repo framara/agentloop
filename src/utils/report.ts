@@ -8,6 +8,7 @@ export interface StepRecord {
   output: string;
   exitCode: number;
   durationMs: number;
+  costUsd?: number;
 }
 
 export async function generateReport(
@@ -17,6 +18,8 @@ export async function generateReport(
   totalDurationMs: number,
   cwd: string
 ): Promise<string> {
+  const totalCost = records.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+
   const lines: string[] = [
     `# AgentLoop Run Report`,
     ``,
@@ -24,6 +27,7 @@ export async function generateReport(
     `**Status:** ${approved ? "✅ Approved" : "⚠️ Max iterations reached"}`,
     `**Total duration:** ${(totalDurationMs / 1000).toFixed(1)}s`,
     `**Steps executed:** ${records.length}`,
+    ...(totalCost > 0 ? [`**Est. cost:** $${totalCost.toFixed(4)}`] : []),
     ``,
     `---`,
     ``,
@@ -35,6 +39,9 @@ export async function generateReport(
     lines.push(`- **Agent:** ${record.agent}`);
     lines.push(`- **Exit code:** ${record.exitCode}`);
     lines.push(`- **Duration:** ${(record.durationMs / 1000).toFixed(1)}s`);
+    if (record.costUsd !== undefined) {
+      lines.push(`- **Est. cost:** $${record.costUsd.toFixed(4)}`);
+    }
     lines.push(``);
     lines.push(`<details>`);
     lines.push(`<summary>Output</summary>`);

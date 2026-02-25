@@ -144,6 +144,7 @@ AgentLoop will:
 | `agentloop run` | Execute a workflow |
 | `agentloop init` | Create a starter `agentloop.yml` |
 | `agentloop validate` | Check if your config is valid |
+| `agentloop cleanup` | Remove agentloop worktrees and branches |
 
 ### `agentloop run` flags
 
@@ -153,6 +154,7 @@ AgentLoop will:
 | `-s, --spec <text\|file>` | — | Feature spec (inline text or path to .md file) |
 | `-d, --cwd <dir>` | `.` | Working directory |
 | `--dry-run` | — | Preview plan without executing |
+| `--worktree` | — | Run in an isolated git worktree |
 
 ## Config Reference
 
@@ -165,12 +167,20 @@ agents:
     model: claude-sonnet-4-20250514 # optional model override
     system: |           # optional system prompt
       Your role description...
+
+  # Custom agent — use any CLI
+  my_custom_agent:
+    cli: custom
+    command: "aider --yes-always --message {{prompt}}"
 ```
 
 ### Steps
 
+Steps can use either an **agent** (AI CLI) or a **shell command** (`run`):
+
 ```yaml
 steps:
+  # Agent step — sends a prompt to an AI coding CLI
   - name: step_name         # unique identifier
     agent: my_agent          # references an agent key
     prompt: |                # supports {{ variables }}
@@ -183,7 +193,47 @@ steps:
       until: steps.audit.output contains APPROVED
       max: 5                 # max iterations
       on_max: fail           # fail | pause | continue
+
+  # Shell step — runs a command directly, no agent needed
+  - name: test
+    run: "npm test 2>&1 || true"
 ```
+
+Shell steps capture stdout/stderr as `{{ steps.<name>.output }}` and the exit code as `{{ steps.<name>.exitCode }}`, just like agent steps. Use them for tests, linting, builds, or any deterministic command.
+
+### Parallel Steps
+
+Mark consecutive steps with `parallel: true` to run them concurrently:
+
+```yaml
+steps:
+  - name: build
+    agent: builder
+    prompt: "Implement {{ feature_spec }}"
+
+  - name: lint
+    run: "npm run lint 2>&1 || true"
+    parallel: true
+
+  - name: test
+    run: "npm test 2>&1 || true"
+    parallel: true
+
+  - name: security
+    agent: auditor
+    prompt: "Audit the code changes."
+    parallel: true
+
+  - name: fix
+    agent: builder
+    prompt: |
+      Fix these issues:
+      Lint: {{ steps.lint.output }}
+      Tests: {{ steps.test.output }}
+      Security: {{ steps.security.output }}
+```
+
+Consecutive `parallel: true` steps form a group and execute via `Promise.all`. Note: parallel steps cannot have `loop` — move the loop to a sequential step downstream.
 
 ### Template Variables
 
@@ -199,6 +249,8 @@ See the [`examples/`](./examples) directory:
 
 - **[build-and-audit.yml](./examples/build-and-audit.yml)** — The classic two-agent loop
 - **[build-test-secure.yml](./examples/build-test-secure.yml)** — Three agents: builder, tester, security auditor
+- **[build-test-fix.yml](./examples/build-test-fix.yml)** — Shell steps for lint + test, loop until tests pass
+- **[parallel-audit.yml](./examples/parallel-audit.yml)** — Lint + test + security audit in parallel
 
 ## Roadmap
 
@@ -207,12 +259,12 @@ See the [`examples/`](./examples) directory:
 - [x] Git diff context capture
 - [x] Loop logic with configurable termination
 - [x] Markdown run reports
-- [ ] Gemini CLI and Aider adapters
-- [ ] Custom agent support (any CLI)
-- [ ] Parallel step execution
-- [ ] Cost tracking (token usage per agent)
-- [ ] Git branch-per-run with auto-commits
-- [ ] Test runner integration (auto-run tests between steps)
+- [x] Git worktree isolation (`--worktree`) with auto-commits per step
+- [x] Gemini CLI adapter
+- [x] Custom agent support (any CLI via `command` template)
+- [x] Parallel step execution (`parallel: true`)
+- [x] Shell steps (`run`) for tests, linting, builds — no agent needed
+- [x] Cost tracking (Claude Code via JSON output)
 - [ ] TUI diff viewer
 - [ ] Web dashboard for run history
 - [ ] GitHub Actions integration

@@ -4,6 +4,8 @@ export interface AgentResult {
   output: string;
   exitCode: number;
   durationMs: number;
+  costUsd?: number;
+  timedOut?: boolean;
 }
 
 export interface AgentAdapter {

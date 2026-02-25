@@ -1,0 +1,57 @@
+name: parallel-audit
+
+agents:
+  builder:
+    cli: claude-code
+    system: |
+      You are a senior engineer. Write clean, production-ready code.
+      When fixing issues, address each point specifically.
+
+  auditor:
+    cli: codex
+    system: |
+      You are a strict code auditor.
+      If everything passes, respond with exactly: APPROVED
+      Otherwise, list specific issues with file paths and line numbers.
+
+steps:
+  - name: build
+    agent: builder
+    prompt: |
+      Implement the following feature:
+      {{ feature_spec }}
+
+  # These three run in parallel — saves significant wall-clock time
+  - name: lint
+    run: "npm run lint 2>&1 || true"
+    parallel: true
+
+  - name: test
+    run: "npm test 2>&1 || true"
+    parallel: true
+
+  - name: security-audit
+    agent: auditor
+    prompt: |
+      Perform a thorough security audit of all recent changes.
+    context:
+      - git:diff
+    parallel: true
+
+  - name: fix
+    agent: builder
+    prompt: |
+      Fix ALL of the following issues:
+
+      ## Lint Errors:
+      {{ steps.lint.output }}
+
+      ## Test Failures:
+      {{ steps.test.output }}
+
+      ## Security Audit:
+      {{ steps.security-audit.output }}
+    loop:
+      until: steps.security-audit.output contains APPROVED
+      max: 5
+      on_max: fail

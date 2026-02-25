@@ -1,10 +1,17 @@
 import type { AgentAdapter } from "./base.js";
 import { ClaudeCodeAdapter } from "./claude-code.js";
 import { CodexAdapter } from "./codex.js";
+import { GeminiAdapter } from "./gemini.js";
+import { CustomAdapter } from "./custom.js";
+
+const customAdapter = new CustomAdapter();
 
 const adapters: Record<string, AgentAdapter> = {
   "claude-code": new ClaudeCodeAdapter(),
   codex: new CodexAdapter(),
+  gemini: new GeminiAdapter(),
+  aider: customAdapter,
+  custom: customAdapter,
 };
 
 export function getAdapter(cli: string): AgentAdapter {

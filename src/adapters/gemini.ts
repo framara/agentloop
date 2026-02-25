@@ -3,12 +3,12 @@ import type { AgentConfig } from "../core/schema.js";
 import type { AgentAdapter, AgentResult } from "./base.js";
 import { logger } from "../utils/logger.js";
 
-export class CodexAdapter implements AgentAdapter {
-  name = "codex";
+export class GeminiAdapter implements AgentAdapter {
+  name = "gemini";
 
   async isAvailable(): Promise<boolean> {
     try {
-      await execa("codex", ["--version"]);
+      await execa("gemini", ["--version"]);
       return true;
     } catch {
       return false;
@@ -20,11 +20,7 @@ export class CodexAdapter implements AgentAdapter {
     config: AgentConfig,
     cwd: string
   ): Promise<AgentResult> {
-    const args: string[] = [
-      "--quiet",
-      "--approval-mode",
-      "full-auto",
-    ];
+    const args: string[] = [];
 
     if (config.model) {
       args.push("--model", config.model);
@@ -35,10 +31,10 @@ export class CodexAdapter implements AgentAdapter {
 
     const start = Date.now();
 
-    logger.dim(`  → codex ${args.slice(0, 3).join(" ")}...`);
+    logger.dim(`  → gemini ${args.slice(0, 3).join(" ")}...`);
 
     try {
-      const result = await execa("codex", args, {
+      const result = await execa("gemini", args, {
         cwd,
         input: prompt,
         timeout: 10 * 60 * 1000,
@@ -47,7 +43,7 @@ export class CodexAdapter implements AgentAdapter {
 
       if (result.timedOut) {
         return {
-          output: "[TIMED OUT] Codex exceeded the 10 minute timeout.\n" + (result.stdout || result.stderr || ""),
+          output: "[TIMED OUT] Gemini CLI exceeded the 10 minute timeout.\n" + (result.stdout || result.stderr || ""),
           exitCode: 1,
           durationMs: Date.now() - start,
           timedOut: true,
@@ -61,7 +57,7 @@ export class CodexAdapter implements AgentAdapter {
       };
     } catch (err: any) {
       return {
-        output: err.message ?? "Codex execution failed",
+        output: err.message ?? "Gemini CLI execution failed",
         exitCode: 1,
         durationMs: Date.now() - start,
       };

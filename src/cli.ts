@@ -18,6 +18,7 @@ program
   .option("-s, --spec <spec>", "Feature spec (text or file path)")
   .option("-d, --cwd <dir>", "Working directory", process.cwd())
   .option("--dry-run", "Preview execution plan without running")
+  .option("--worktree", "Run in an isolated git worktree")
   .action(async (opts) => {
     try {
       await run({
@@ -25,6 +26,7 @@ program
         spec: opts.spec,
         cwd: opts.cwd,
         dryRun: opts.dryRun,
+        worktree: opts.worktree,
       });
     } catch (err: any) {
       logger.error(err.message);
@@ -76,11 +78,17 @@ steps:
       Implement the following feature:
       {{ feature_spec }}
 
+  - name: test
+    run: "npm test 2>&1 || true"
+
   - name: audit
     agent: auditor
     prompt: |
       Carefully audit all recent code changes in this repository.
       Review every file that was added or modified.
+
+      ## Test Results:
+      {{ steps.test.output }}
     context:
       - git:diff
 
@@ -97,6 +105,40 @@ steps:
 
     await writeFile("agentloop.yml", template, "utf-8");
     logger.success("Created agentloop.yml — edit it and run: agentloop run --spec 'your feature'");
+  });
+
+program
+  .command("cleanup")
+  .description("Remove agentloop worktrees and branches")
+  .option("-d, --cwd <dir>", "Working directory", process.cwd())
+  .action(async (opts) => {
+    const { listWorktrees, removeWorktree } = await import("./utils/worktree.js");
+
+    const worktrees = await listWorktrees(opts.cwd);
+
+    if (worktrees.length === 0) {
+      logger.success("No agentloop worktrees found. Nothing to clean up.");
+      return;
+    }
+
+    logger.info(`Found ${worktrees.length} agentloop worktree(s):\n`);
+    for (const wt of worktrees) {
+      logger.dim(`  ${wt.branch}  →  ${wt.path}`);
+    }
+    console.log();
+
+    let removed = 0;
+    for (const wt of worktrees) {
+      const result = await removeWorktree(opts.cwd, wt.path, wt.branch);
+      if (result.removed) {
+        logger.success(`Removed ${wt.branch}`);
+        removed++;
+      } else {
+        logger.warn(`${wt.branch}: ${result.error}`);
+      }
+    }
+
+    logger.info(`Cleaned up ${removed}/${worktrees.length} worktree(s).`);
   });
 
 program

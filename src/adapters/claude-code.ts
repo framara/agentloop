@@ -23,7 +23,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     const args: string[] = [
       "--print", // non-interactive mode, prints response to stdout
       "--output-format",
-      "text",
+      "json",
     ];
 
     if (config.model) {
@@ -34,7 +34,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       args.push("--system-prompt", config.system);
     }
 
-    args.push(prompt);
+    // Pipe prompt via stdin to avoid ARG_MAX limits on large contexts
+    args.push("-");
 
     const start = Date.now();
 
@@ -43,14 +44,46 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     try {
       const result = await execa("claude", args, {
         cwd,
+        input: prompt,
         timeout: 10 * 60 * 1000, // 10 min timeout
         reject: false,
       });
 
+      if (result.timedOut) {
+        return {
+          output: "[TIMED OUT] Claude Code exceeded the 10 minute timeout.\n" + (result.stdout || result.stderr || ""),
+          exitCode: 1,
+          durationMs: Date.now() - start,
+          timedOut: true,
+        };
+      }
+
+      const raw = result.stdout || result.stderr || "";
+      let output = raw;
+      let costUsd: number | undefined;
+
+      // Parse JSON output for structured result + cost
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === "object" && parsed !== null) {
+          const text = parsed.result ?? parsed.text;
+          if (typeof text === "string") {
+            output = text;
+          }
+          costUsd =
+            typeof parsed.cost_usd === "number" ? parsed.cost_usd :
+            typeof parsed.total_cost_usd === "number" ? parsed.total_cost_usd :
+            undefined;
+        }
+      } catch {
+        // Not valid JSON — use raw output as-is
+      }
+
       return {
-        output: result.stdout || result.stderr,
+        output,
         exitCode: result.exitCode ?? 1,
         durationMs: Date.now() - start,
+        costUsd,
       };
     } catch (err: any) {
       return {

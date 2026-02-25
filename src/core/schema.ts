@@ -30,16 +30,43 @@ export const LoopSchema = z.object({
 export type LoopConfig = z.infer<typeof LoopSchema>;
 
 // ── Step definition ─────────────────────────────────────────────────
-export const StepSchema = z.object({
-  name: z.string().describe("Unique step identifier"),
-  agent: z.string().describe("Key referencing an agent in the agents map"),
-  prompt: z.string().describe("Prompt template (supports {{ variables }})"),
-  context: z
-    .array(z.string())
-    .optional()
-    .describe("Files, dirs, or special refs like git:diff to include"),
-  loop: LoopSchema.optional().describe("Loop configuration for this step"),
-});
+export const StepSchema = z
+  .object({
+    name: z.string().describe("Unique step identifier"),
+    agent: z
+      .string()
+      .optional()
+      .describe("Key referencing an agent in the agents map"),
+    prompt: z
+      .string()
+      .optional()
+      .describe("Prompt template (supports {{ variables }})"),
+    run: z
+      .string()
+      .optional()
+      .describe("Shell command to run directly (no agent needed)"),
+    parallel: z
+      .boolean()
+      .optional()
+      .describe("Run concurrently with adjacent parallel steps"),
+    context: z
+      .array(z.string())
+      .optional()
+      .describe("Files, dirs, or special refs like git:diff to include"),
+    loop: LoopSchema.optional().describe("Loop configuration for this step"),
+  })
+  .refine(
+    (s) => (s.agent && s.prompt) || s.run,
+    'Step must have either "agent" + "prompt" or "run"'
+  )
+  .refine(
+    (s) => !(s.run && s.agent),
+    'Step cannot have both "run" and "agent" — use one or the other'
+  )
+  .refine(
+    (s) => !(s.parallel && s.loop),
+    'Parallel steps cannot have "loop" — move the loop to a sequential step'
+  );
 
 export type StepConfig = z.infer<typeof StepSchema>;
 
