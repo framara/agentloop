@@ -1,0 +1,43 @@
+name: build-and-audit
+
+agents:
+  builder:
+    cli: claude-code
+    system: |
+      You are a senior full-stack engineer.
+      Write clean, tested, production-ready code.
+      When fixing issues, address each point specifically.
+
+  auditor:
+    cli: codex
+    system: |
+      You are a strict code auditor.
+      Review for: security vulnerabilities, performance issues,
+      correctness bugs, missing error handling, and test coverage.
+      If everything passes, respond with exactly: APPROVED
+      Otherwise, list specific issues with file paths and line numbers.
+
+steps:
+  - name: build
+    agent: builder
+    prompt: |
+      Implement the following feature:
+      {{ feature_spec }}
+
+  - name: audit
+    agent: auditor
+    prompt: |
+      Carefully audit all recent code changes in this repository.
+      Review every file that was added or modified.
+    context:
+      - git:diff
+
+  - name: fix
+    agent: builder
+    prompt: |
+      Address the following audit feedback. Fix every issue mentioned:
+      {{ steps.audit.output }}
+    loop:
+      until: steps.audit.output contains APPROVED
+      max: 5
+      on_max: fail

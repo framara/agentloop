@@ -1,0 +1,63 @@
+name: build-test-secure
+
+agents:
+  builder:
+    cli: claude-code
+    model: claude-sonnet-4-20250514
+    system: |
+      You are a senior engineer. Write clean, well-tested code.
+      Always include unit tests for new functionality.
+
+  tester:
+    cli: claude-code
+    system: |
+      You are a QA engineer. Run the test suite and analyze results.
+      If all tests pass, respond with: TESTS PASSING
+      Otherwise, list failures with reproduction steps.
+
+  security:
+    cli: codex
+    system: |
+      You are a security auditor. Check for:
+      - SQL injection, XSS, CSRF vulnerabilities
+      - Hardcoded secrets or credentials
+      - Insecure dependencies
+      - Missing input validation
+      - Auth/authz bypass potential
+      If everything is secure, respond with exactly: APPROVED
+      Otherwise, list vulnerabilities with severity ratings.
+
+steps:
+  - name: build
+    agent: builder
+    prompt: |
+      Implement the following feature:
+      {{ feature_spec }}
+
+  - name: test
+    agent: tester
+    prompt: |
+      Run the full test suite for this project.
+      Analyze any failures and report results.
+
+  - name: security-audit
+    agent: security
+    prompt: |
+      Perform a thorough security audit of all recent changes.
+    context:
+      - git:diff
+
+  - name: fix
+    agent: builder
+    prompt: |
+      Fix the following issues:
+
+      ## Test Results:
+      {{ steps.test.output }}
+
+      ## Security Audit:
+      {{ steps.security-audit.output }}
+    loop:
+      until: steps.security-audit.output contains APPROVED
+      max: 3
+      on_max: pause

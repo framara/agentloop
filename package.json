@@ -1,0 +1,42 @@
+{
+  "name": "agentloop",
+  "version": "0.1.0",
+  "description": "Multi-agent orchestration for AI coding CLIs. Chain Claude Code, Codex, and more into automated build → audit → fix loops.",
+  "type": "module",
+  "main": "./dist/core/engine.js",
+  "bin": {
+    "agentloop": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai", "coding", "multi-agent", "orchestration",
+    "claude-code", "codex", "vibe-coding", "automation", "code-review"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/agentloop"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "execa": "^9.6.1",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
