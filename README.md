@@ -1,11 +1,11 @@
-# 🔁 AgentLoop
+# 🔁 AgentLooper
 
 **Multi-agent orchestration for AI coding CLIs.**
 
 Chain Claude Code, Codex, and other AI coding agents into automated build → audit → fix loops. Like CI/CD, but for AI-generated code.
 
 ```
-agentloop run --spec "Add Stripe billing with usage-based pricing"
+agentlooper run --spec "Add Stripe billing with usage-based pricing"
 ```
 
 ```
@@ -56,20 +56,20 @@ If you've used AI coding agents, you've probably discovered this workflow:
 3. You paste Agent B's feedback back to Agent A
 4. Repeat until it's good
 
-This works great — but it's manual, tedious, and doesn't scale. **AgentLoop automates the entire loop.**
+This works great — but it's manual, tedious, and doesn't scale. **AgentLooper automates the entire loop.**
 
 ## Quick Start
 
 ```bash
 # Install
-npm install -g agentloop
+npm install -g agentlooper
 
 # Create a config in your project
 cd your-project
-agentloop init
+agentlooper init
 
 # Run it
-agentloop run --spec "Add user authentication with JWT tokens"
+agentlooper run --spec "Add user authentication with JWT tokens"
 ```
 
 ## Prerequisites
@@ -81,7 +81,7 @@ You need at least one AI coding CLI installed:
 
 ## How It Works
 
-AgentLoop reads a simple YAML config that defines **agents** and **steps**:
+AgentLooper reads a simple YAML config that defines **agents** and **steps**:
 
 ```yaml
 # agentloop.yml
@@ -130,10 +130,10 @@ steps:
 Then run:
 
 ```bash
-agentloop run --spec "Add a /health endpoint that returns system status"
+agentlooper run --spec "Add a /health endpoint that returns system status"
 ```
 
-AgentLoop will:
+AgentLooper will:
 1. Send the spec to Claude Code to build the feature
 2. Capture the git diff and send it to Codex for auditing
 3. If the auditor finds issues, send them back to Claude Code to fix
@@ -143,12 +143,12 @@ AgentLoop will:
 
 | Command | Description |
 |---|---|
-| `agentloop run` | Execute a workflow |
-| `agentloop init` | Create a starter `agentloop.yml` |
-| `agentloop validate` | Check if your config is valid |
-| `agentloop cleanup` | Remove agentloop worktrees and branches |
+| `agentlooper run` | Execute a workflow |
+| `agentlooper init` | Create a starter `agentloop.yml` |
+| `agentlooper validate` | Check if your config is valid |
+| `agentlooper cleanup` | Remove agentloop worktrees and branches |
 
-### `agentloop run` flags
+### `agentlooper run` flags
 
 | Flag | Default | Description |
 |---|---|---|

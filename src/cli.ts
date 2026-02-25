@@ -7,7 +7,7 @@ import { logger } from "./utils/logger.js";
 const program = new Command();
 
 program
-  .name("agentloop")
+  .name("agentlooper")
   .description("Multi-agent orchestration for coding CLIs")
   .version("0.1.0");
 
@@ -104,7 +104,7 @@ steps:
 `;
 
     await writeFile("agentloop.yml", template, "utf-8");
-    logger.success("Created agentloop.yml — edit it and run: agentloop run --spec 'your feature'");
+    logger.success("Created agentloop.yml — edit it and run: agentlooper run --spec 'your feature'");
   });
 
 program

@@ -1,4 +1,4 @@
-# AgentLoop — Project Skill
+# AgentLooper — Project Skill
 
 Multi-agent orchestrator for AI coding CLIs. Chains Claude Code, Codex, Gemini, and any CLI into automated build → audit → fix loops via YAML config.
 
@@ -120,10 +120,10 @@ steps:
 ## CLI Commands
 
 ```
-agentloop run -c config.yml -s "spec" --worktree --dry-run
-agentloop init                    # Scaffold agentloop.yml
-agentloop validate -c config.yml  # Check config validity
-agentloop cleanup                 # Remove agentloop worktrees/branches
+agentlooper run -c config.yml -s "spec" --worktree --dry-run
+agentlooper init                    # Scaffold agentloop.yml
+agentlooper validate -c config.yml  # Check config validity
+agentlooper cleanup                 # Remove agentloop worktrees/branches
 ```
 
 ## Tech Stack
