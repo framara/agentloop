@@ -15,6 +15,10 @@ export const AgentSchema = z.object({
     .boolean()
     .optional()
     .describe("Allow the agent to edit files (default: read-only / print mode)"),
+  timeout: z
+    .number()
+    .optional()
+    .describe("Timeout in minutes for agent execution (default: 10)"),
 });
 
 export type AgentConfig = z.infer<typeof AgentSchema>;

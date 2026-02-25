@@ -20,11 +20,7 @@ export class CodexAdapter implements AgentAdapter {
     config: AgentConfig,
     cwd: string
   ): Promise<AgentResult> {
-    const args: string[] = [
-      "--quiet",
-      "--approval-mode",
-      "full-auto",
-    ];
+    const args: string[] = ["exec", "--full-auto"];
 
     if (config.model) {
       args.push("--model", config.model);
@@ -33,6 +29,7 @@ export class CodexAdapter implements AgentAdapter {
     // Pipe prompt via stdin to avoid ARG_MAX limits on large contexts
     args.push("-");
 
+    const timeoutMs = (config.timeout ?? 10) * 60 * 1000;
     const start = Date.now();
 
     logger.dim(`  → codex ${args.slice(0, 3).join(" ")}...`);
@@ -41,13 +38,13 @@ export class CodexAdapter implements AgentAdapter {
       const result = await execa("codex", args, {
         cwd,
         input: prompt,
-        timeout: 10 * 60 * 1000,
+        timeout: timeoutMs,
         reject: false,
       });
 
       if (result.timedOut) {
         return {
-          output: "[TIMED OUT] Codex exceeded the 10 minute timeout.\n" + (result.stdout || result.stderr || ""),
+          output: `[TIMED OUT] Codex exceeded the ${config.timeout ?? 10} minute timeout.\n` + (result.stdout || result.stderr || ""),
           exitCode: 1,
           durationMs: Date.now() - start,
           timedOut: true,

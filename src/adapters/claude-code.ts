@@ -41,6 +41,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     // Pipe prompt via stdin to avoid ARG_MAX limits on large contexts
     args.push("-");
 
+    const timeoutMs = (config.timeout ?? 10) * 60 * 1000;
     const start = Date.now();
 
     logger.dim(`  → claude ${args.slice(0, 3).join(" ")}...`);
@@ -49,13 +50,13 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       const result = await execa("claude", args, {
         cwd,
         input: prompt,
-        timeout: 10 * 60 * 1000, // 10 min timeout
+        timeout: timeoutMs,
         reject: false,
       });
 
       if (result.timedOut) {
         return {
-          output: "[TIMED OUT] Claude Code exceeded the 10 minute timeout.\n" + (result.stdout || result.stderr || ""),
+          output: `[TIMED OUT] Claude Code exceeded the ${config.timeout ?? 10} minute timeout.\n` + (result.stdout || result.stderr || ""),
           exitCode: 1,
           durationMs: Date.now() - start,
           timedOut: true,
