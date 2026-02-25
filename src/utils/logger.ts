@@ -3,16 +3,32 @@ import chalk from "chalk";
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 let spinnerTimer: ReturnType<typeof setInterval> | null = null;
 let spinnerFrame = 0;
+let spinnerStartMs = 0;
+let spinnerText = "";
+
+function formatElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
 
 export const logger = {
   spinnerStart(text: string) {
     this.spinnerStop();
     spinnerFrame = 0;
+    spinnerStartMs = Date.now();
+    spinnerText = text;
     spinnerTimer = setInterval(() => {
       const frame = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length];
-      process.stderr.write(`\r  ${chalk.cyan(frame!)} ${chalk.dim(text)}`);
+      const elapsed = formatElapsed(Date.now() - spinnerStartMs);
+      process.stderr.write(`\r\x1b[K  ${chalk.cyan(frame!)} ${chalk.dim(spinnerText)} ${chalk.dim(`(${elapsed})`)}`);
       spinnerFrame++;
     }, 80);
+  },
+
+  spinnerUpdate(text: string) {
+    spinnerText = text;
   },
 
   spinnerStop() {

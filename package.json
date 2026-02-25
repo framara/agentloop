@@ -1,6 +1,6 @@
 {
   "name": "agentlooper",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Multi-agent orchestration for AI coding CLIs. Chain Claude Code, Codex, and more into automated build → audit → fix loops.",
   "type": "module",
   "main": "./dist/core/engine.js",
