@@ -32,6 +32,7 @@ async function runClaude(input: string): Promise<RunResult> {
   const args = [
     "--print",
     "--dangerously-skip-permissions",
+    "--verbose",
     "--output-format", "stream-json",
     "-",
   ];
@@ -118,23 +119,17 @@ async function runClaude(input: string): Promise<RunResult> {
 // ── Codex (reviewer) ─────────────────────────────────────────────────
 
 async function runCodexReview(originalPrompt: string): Promise<RunResult> {
-  const reviewInstructions = `Review the uncommitted changes. The original request was: "${originalPrompt}"
-
-If the implementation is correct, complete, and has no bugs or issues, respond with exactly: APPROVED
-Otherwise, list specific issues that need to be fixed.`;
+  const reviewInstructions = `The original request was: "${originalPrompt}". If the implementation is correct, complete, and has no bugs, respond with exactly: APPROVED. Otherwise, list specific issues to fix.`;
 
   const args = [
     "exec", "review",
     "--uncommitted",
     "--full-auto",
-    "-",
+    reviewInstructions,
   ];
-
-  const start = Date.now();
 
   const result = await execa("codex", args, {
     cwd: process.cwd(),
-    input: reviewInstructions,
     reject: false,
   });
 
