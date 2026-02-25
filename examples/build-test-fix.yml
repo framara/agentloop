@@ -3,6 +3,7 @@ name: build-test-fix
 agents:
   builder:
     cli: claude-code
+    allowEdits: true
     system: |
       You are a senior engineer. Write clean, tested code.
       When fixing issues, address each failing test specifically.

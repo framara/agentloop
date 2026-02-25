@@ -19,7 +19,7 @@ agentloop run --spec "Add Stripe billing with usage-based pricing"
   ✔ All CLIs available: claude-code, codex
 
 ▶ build (iteration 1)
-  → claude --print --output-format text...
+  → claude --print --output-format json...
   ✔ Done in 45.2s
 
 ▶ audit (iteration 1)
@@ -28,7 +28,7 @@ agentloop run --spec "Add Stripe billing with usage-based pricing"
   ⚠ Condition not met — looping (1/5)
 
 ▶ fix (iteration 2)
-  → claude --print --output-format text...
+  → claude --print --output-format json...
   ✔ Done in 28.7s
 
 ▶ audit (iteration 2)
@@ -38,8 +38,9 @@ agentloop run --spec "Add Stripe billing with usage-based pricing"
 
 ─────────────────────────────────────────────
   Status:     APPROVED
-  Iterations: 4
+  Steps run:  4
   Duration:   124.3s
+  Est. cost:  $0.2847
 ─────────────────────────────────────────────
   ℹ Report saved to: agentloop-report-1740512345678.md
 ```
@@ -89,6 +90,7 @@ name: build-and-audit
 agents:
   builder:
     cli: claude-code
+    allowEdits: true
     system: |
       You are a senior full-stack engineer.
       Write clean, tested, production-ready code.
@@ -165,6 +167,7 @@ agents:
   my_agent:
     cli: claude-code    # claude-code | codex | gemini | aider | custom
     model: claude-sonnet-4-20250514 # optional model override
+    allowEdits: true    # let the agent write files (default: read-only)
     system: |           # optional system prompt
       Your role description...
 
@@ -265,6 +268,8 @@ See the [`examples/`](./examples) directory:
 - [x] Parallel step execution (`parallel: true`)
 - [x] Shell steps (`run`) for tests, linting, builds — no agent needed
 - [x] Cost tracking (Claude Code via JSON output)
+- [x] `allowEdits` flag for agent file write permissions
+- [x] Spinner animation during step execution
 - [ ] TUI diff viewer
 - [ ] Web dashboard for run history
 - [ ] GitHub Actions integration

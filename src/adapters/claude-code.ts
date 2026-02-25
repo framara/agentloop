@@ -21,10 +21,14 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     cwd: string
   ): Promise<AgentResult> {
     const args: string[] = [
-      "--print", // non-interactive mode, prints response to stdout
+      "--print", // non-interactive mode
       "--output-format",
       "json",
     ];
+
+    if (config.allowEdits) {
+      args.push("--dangerously-skip-permissions");
+    }
 
     if (config.model) {
       args.push("--model", config.model);

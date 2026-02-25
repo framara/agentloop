@@ -11,6 +11,10 @@ export const AgentSchema = z.object({
     .string()
     .optional()
     .describe("Custom command template (for 'custom' cli type)"),
+  allowEdits: z
+    .boolean()
+    .optional()
+    .describe("Allow the agent to edit files (default: read-only / print mode)"),
 });
 
 export type AgentConfig = z.infer<typeof AgentSchema>;

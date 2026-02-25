@@ -1,6 +1,28 @@
 import chalk from "chalk";
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+let spinnerTimer: ReturnType<typeof setInterval> | null = null;
+let spinnerFrame = 0;
+
 export const logger = {
+  spinnerStart(text: string) {
+    this.spinnerStop();
+    spinnerFrame = 0;
+    spinnerTimer = setInterval(() => {
+      const frame = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length];
+      process.stderr.write(`\r  ${chalk.cyan(frame!)} ${chalk.dim(text)}`);
+      spinnerFrame++;
+    }, 80);
+  },
+
+  spinnerStop() {
+    if (spinnerTimer) {
+      clearInterval(spinnerTimer);
+      spinnerTimer = null;
+      process.stderr.write("\r\x1b[K"); // clear the spinner line
+    }
+  },
+
   step(name: string, iteration?: number) {
     const iter = iteration !== undefined ? chalk.dim(` (iteration ${iteration})`) : "";
     console.log(`\n${chalk.bold.cyan("▶")} ${chalk.bold(name)}${iter}`);

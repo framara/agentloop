@@ -278,11 +278,14 @@ export async function run(options: RunOptions): Promise<void> {
           logger.step(s.name, iteration);
         }
 
+        const names = group.steps.map((s) => s.name).join(", ");
+        logger.spinnerStart(`Running ${names}...`);
         const results = await Promise.all(
           group.steps.map((step) =>
             executeOneStep(step, config, variables, effectiveCwd, worktreeInfo?.baseBranch)
           )
         );
+        logger.spinnerStop();
 
         // Process all results
         for (let j = 0; j < group.steps.length; j++) {
@@ -314,13 +317,13 @@ export async function run(options: RunOptions): Promise<void> {
 
         // Auto-commit once for the entire parallel group
         if (worktreeInfo) {
-          const names = group.steps.map((s) => s.name).join(" + ");
+          const commitNames = group.steps.map((s) => s.name).join(" + ");
           const committed = await snapshotCommit(
             effectiveCwd,
-            `agentloop: ${names} (iteration ${iteration})`
+            `agentloop: ${commitNames} (iteration ${iteration})`
           );
           if (committed) {
-            logger.dim(`  Auto-committed: "${names}"`);
+            logger.dim(`  Auto-committed: "${commitNames}"`);
           }
         }
       } else {
@@ -328,9 +331,11 @@ export async function run(options: RunOptions): Promise<void> {
         const step = group.steps[0]!;
         logger.step(step.name, iteration);
 
+        logger.spinnerStart(`Running ${step.name}...`);
         const result = await executeOneStep(
           step, config, variables, effectiveCwd, worktreeInfo?.baseBranch
         );
+        logger.spinnerStop();
 
         variables[`steps.${step.name}.output`] = result.output;
         variables[`steps.${step.name}.exitCode`] = String(result.exitCode);

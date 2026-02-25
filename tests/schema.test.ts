@@ -13,6 +13,15 @@ describe("AgentSchema", () => {
       model: "gpt-4",
       system: "You are helpful",
       command: "aider --message {{prompt}}",
+      allowEdits: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("validates agent with allowEdits false", () => {
+    const result = AgentSchema.safeParse({
+      cli: "claude-code",
+      allowEdits: false,
     });
     expect(result.success).toBe(true);
   });

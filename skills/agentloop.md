@@ -39,6 +39,7 @@ agents:
   agent_key:
     cli: claude-code | codex | gemini | aider | custom
     model: optional-model-override
+    allowEdits: true              # Let the agent edit files (default: read-only)
     system: |
       Optional system prompt
     command: "for custom cli: any-cli --flag {{prompt}}"
@@ -101,9 +102,15 @@ steps:
 ### Adapters
 - All built-in adapters pipe prompts via stdin (avoids ARG_MAX)
 - Claude Code uses `--output-format json` to extract cost from structured response
+- `allowEdits: true` adds `--dangerously-skip-permissions` so agents can modify files (default is read-only `--print` mode)
 - Custom adapter replaces `{{prompt}}` in the command template, runs via `sh -c`
 - `aider` is an alias for the custom adapter
 - Timeout detection: adapters check `timedOut` and prefix output with `[TIMED OUT]`
+
+### Spinner
+- Braille-dot spinner shows while steps are executing (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏)
+- Writes to stderr so it doesn't mix with captured output
+- Automatically cleared when a step completes
 
 ### Template System
 - `{{ variable }}` — resolved from the variables map
