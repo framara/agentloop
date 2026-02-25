@@ -1,62 +1,55 @@
 # 🔁 AgentLooper
 
-**Multi-agent orchestration for AI coding CLIs.**
+**Two AI agents. One builds. One reviews. Loop until it's right.**
 
-Chain Claude Code, Codex, and other AI coding agents into automated build → audit → fix loops. Like CI/CD, but for AI-generated code.
+Claude Code writes the code. Codex reviews it. If there are issues, Claude Code fixes them. Repeat until approved. Zero config.
 
 ```
-agentlooper run --spec "Add Stripe billing with usage-based pricing"
+agentlooper "Add Stripe billing with usage-based pricing"
 ```
 
 ```
    ╭─────────────────────╮
-   │   🔁  AgentLoop     │
+   │   🔁 AgentLooper    │
    │   Multi-Agent CLI   │
    ╰─────────────────────╯
 
-  ℹ Workflow: build-and-audit
-  ℹ Steps: build → audit → fix
-  ✔ All CLIs available: claude-code, codex
+▶ Build (iteration 1)
+  ⠼ Writing services/billing.ts (32s)
+  ✔ Done
 
-▶ build (iteration 1)
-  → claude --print --output-format json...
-  ✔ Done in 45.2s
+▶ Review (iteration 1)
+  ⠧ Codex is reviewing... (18s)
+  ⚠ Issues found
+  │ Missing error handling in webhook endpoint
+  │ No idempotency key on charge creation
 
-▶ audit (iteration 1)
-  → codex --quiet --approval-mode full-auto...
-  ✔ Done in 32.1s
-  ⚠ Condition not met — looping (1/5)
+▶ Fix (iteration 2)
+  ⠹ Editing services/billing.ts (14s)
+  ✔ Done
 
-▶ fix (iteration 2)
-  → claude --print --output-format json...
-  ✔ Done in 28.7s
-
-▶ audit (iteration 2)
-  → codex --quiet --approval-mode full-auto...
-  ✔ Done in 18.3s
-  ✔ Loop condition met — workflow complete!
+▶ Review (iteration 2)
+  ✔ APPROVED
 
 ─────────────────────────────────────────────
   Status:     APPROVED
-  Steps run:  4
   Duration:   124.3s
-  Est. cost:  $0.2847
+  Est. cost:  $0.28
 ─────────────────────────────────────────────
-  ℹ Report saved to: agentloop-report-1740512345678.md
 ```
 
 ---
 
 ## Why?
 
-If you've used AI coding agents, you've probably discovered this workflow:
+You've done this manually:
 
-1. **Agent A** builds a feature
-2. **Agent B** audits the code
-3. You paste Agent B's feedback back to Agent A
-4. Repeat until it's good
+1. **Claude Code** builds a feature
+2. You review it, find issues
+3. You paste the feedback back
+4. Repeat 3 more times
 
-This works great — but it's manual, tedious, and doesn't scale. **AgentLooper automates the entire loop.**
+AgentLooper automates the entire loop. Two agents iterate until the code is right — you just walk away.
 
 ## Quick Start
 
@@ -64,224 +57,66 @@ This works great — but it's manual, tedious, and doesn't scale. **AgentLooper 
 # Install
 npm install -g agentlooper
 
-# Create a config in your project
+# Go to your project
 cd your-project
-agentlooper init
 
 # Run it
-agentlooper run --spec "Add user authentication with JWT tokens"
+agentlooper "Add user authentication with JWT tokens"
 ```
+
+That's it. No config files. No YAML. No setup.
 
 ## Prerequisites
 
-You need at least one AI coding CLI installed:
+You need both:
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
 - [Codex CLI](https://github.com/openai/codex) — `npm install -g @openai/codex`
 
 ## How It Works
 
-AgentLooper reads a simple YAML config that defines **agents** and **steps**:
-
-```yaml
-# agentloop.yml
-name: build-and-audit
-
-agents:
-  builder:
-    cli: claude-code
-    allowEdits: true
-    system: |
-      You are a senior full-stack engineer.
-      Write clean, tested, production-ready code.
-
-  auditor:
-    cli: codex
-    system: |
-      You are a strict code auditor.
-      If everything passes, respond with exactly: APPROVED
-      Otherwise, list specific issues to fix.
-
-steps:
-  - name: build
-    agent: builder
-    prompt: |
-      Implement the following feature:
-      {{ feature_spec }}
-
-  - name: audit
-    agent: auditor
-    prompt: |
-      Audit all recent code changes carefully.
-    context:
-      - git:diff
-
-  - name: fix
-    agent: builder
-    prompt: |
-      Address the following audit feedback:
-      {{ steps.audit.output }}
-    loop:
-      until: steps.audit.output contains APPROVED
-      max: 5
-      on_max: fail
+```
+┌─────────────┐     ┌─────────────┐
+│ Claude Code  │────▶│   Codex     │
+│  (builder)   │     │ (reviewer)  │
+│              │◀────│             │
+│ Writes code  │     │ Reviews diff│
+└─────────────┘     └─────────────┘
+       │                    │
+       └──── Loop until ────┘
+              APPROVED
 ```
 
-Then run:
+1. **Build** — Claude Code implements your request (reads your codebase, writes files)
+2. **Review** — Codex reviews uncommitted changes with `codex exec review --uncommitted --full-auto`
+3. If a review line is exactly **APPROVED** → done
+4. If issues are found → **Fix** — Claude Code fixes them → back to Review
+5. Max 5 iterations
 
-```bash
-agentlooper run --spec "Add a /health endpoint that returns system status"
+The builder has full edit permissions. The reviewer is read-only and only reviews the current diff.
+
+## Runtime Rules
+
+- Fail-fast: if Build, Review, or Fix exits non-zero, AgentLooper stops immediately with an error.
+- Strict approval: only a standalone review line equal to `APPROVED` is treated as approval.
+- Relevance gate: suggestion-only / nit-style feedback is treated as non-blocking and does not trigger another fix loop.
+- Review output filtering: Codex session metadata and MCP chatter are stripped from displayed findings to keep feedback focused.
+- Timeout: each agent command has a 20-minute timeout.
+- Loop outcome: if no approval after 5 iterations, AgentLooper exits with a non-zero status.
+
+## What It Looks Like
+
+The spinner shows what the agent is doing in real-time:
+
+```
+  ⠼ Reading Models/Item.swift (8s)
+  ⠦ Writing Services/TagService.swift (24s)
+  ⠧ Editing ContentView.swift (31s)
+  ⠇ Running: xcodebuild -scheme App build (45s)
+  ⠏ Searching files... (52s)
 ```
 
-AgentLooper will:
-1. Send the spec to Claude Code to build the feature
-2. Capture the git diff and send it to Codex for auditing
-3. If the auditor finds issues, send them back to Claude Code to fix
-4. Loop until the auditor responds with "APPROVED" (or max iterations hit)
-
-## CLI Commands
-
-| Command | Description |
-|---|---|
-| `agentlooper run` | Execute a workflow |
-| `agentlooper init` | Create a starter `agentloop.yml` |
-| `agentlooper validate` | Check if your config is valid |
-| `agentlooper cleanup` | Remove agentloop worktrees and branches |
-
-### `agentlooper run` flags
-
-| Flag | Default | Description |
-|---|---|---|
-| `-c, --config <path>` | `agentloop.yml` | Path to workflow config |
-| `-s, --spec <text\|file>` | — | Feature spec (inline text or path to .md file) |
-| `-d, --cwd <dir>` | `.` | Working directory |
-| `--dry-run` | — | Preview plan without executing |
-| `--worktree` | — | Run in an isolated git worktree |
-
-## Config Reference
-
-### Agents
-
-```yaml
-agents:
-  my_agent:
-    cli: claude-code    # claude-code | codex | gemini | aider | custom
-    model: claude-sonnet-4-20250514 # optional model override
-    allowEdits: true    # let the agent write files (default: read-only)
-    system: |           # optional system prompt
-      Your role description...
-
-  # Custom agent — use any CLI
-  my_custom_agent:
-    cli: custom
-    command: "aider --yes-always --message {{prompt}}"
-```
-
-### Steps
-
-Steps can use either an **agent** (AI CLI) or a **shell command** (`run`):
-
-```yaml
-steps:
-  # Agent step — sends a prompt to an AI coding CLI
-  - name: step_name         # unique identifier
-    agent: my_agent          # references an agent key
-    prompt: |                # supports {{ variables }}
-      Do something with {{ feature_spec }}
-      Previous output: {{ steps.other_step.output }}
-    context:                 # optional file/git context
-      - git:diff             # auto-captures current diff
-      - src/index.ts         # includes file contents
-    loop:                    # optional loop config
-      until: steps.audit.output contains APPROVED
-      max: 5                 # max iterations
-      on_max: fail           # fail | pause | continue
-
-  # Shell step — runs a command directly, no agent needed
-  - name: test
-    run: "npm test 2>&1 || true"
-```
-
-Shell steps capture stdout/stderr as `{{ steps.<name>.output }}` and the exit code as `{{ steps.<name>.exitCode }}`, just like agent steps. Use them for tests, linting, builds, or any deterministic command.
-
-### Parallel Steps
-
-Mark consecutive steps with `parallel: true` to run them concurrently:
-
-```yaml
-steps:
-  - name: build
-    agent: builder
-    prompt: "Implement {{ feature_spec }}"
-
-  - name: lint
-    run: "npm run lint 2>&1 || true"
-    parallel: true
-
-  - name: test
-    run: "npm test 2>&1 || true"
-    parallel: true
-
-  - name: security
-    agent: auditor
-    prompt: "Audit the code changes."
-    parallel: true
-
-  - name: fix
-    agent: builder
-    prompt: |
-      Fix these issues:
-      Lint: {{ steps.lint.output }}
-      Tests: {{ steps.test.output }}
-      Security: {{ steps.security.output }}
-```
-
-Consecutive `parallel: true` steps form a group and execute via `Promise.all`. Note: parallel steps cannot have `loop` — move the loop to a sequential step downstream.
-
-### Template Variables
-
-| Variable | Description |
-|---|---|
-| `{{ feature_spec }}` | The `--spec` value passed to `agentloop run` |
-| `{{ steps.<name>.output }}` | Output from a previous step |
-| `{{ steps.<name>.exitCode }}` | Exit code from a previous step |
-
-## Examples
-
-See the [`examples/`](./examples) directory:
-
-- **[build-and-audit.yml](./examples/build-and-audit.yml)** — The classic two-agent loop
-- **[build-test-secure.yml](./examples/build-test-secure.yml)** — Three agents: builder, tester, security auditor
-- **[build-test-fix.yml](./examples/build-test-fix.yml)** — Shell steps for lint + test, loop until tests pass
-- **[parallel-audit.yml](./examples/parallel-audit.yml)** — Lint + test + security audit in parallel
-
-## Roadmap
-
-- [x] Core workflow engine with YAML config
-- [x] Claude Code + Codex CLI adapters
-- [x] Git diff context capture
-- [x] Loop logic with configurable termination
-- [x] Markdown run reports
-- [x] Git worktree isolation (`--worktree`) with auto-commits per step
-- [x] Gemini CLI adapter
-- [x] Custom agent support (any CLI via `command` template)
-- [x] Parallel step execution (`parallel: true`)
-- [x] Shell steps (`run`) for tests, linting, builds — no agent needed
-- [x] Cost tracking (Claude Code via JSON output)
-- [x] `allowEdits` flag for agent file write permissions
-- [x] Spinner animation during step execution
-- [ ] TUI diff viewer
-- [ ] Web dashboard for run history
-- [ ] GitHub Actions integration
-- [ ] Shared workflow library
-
-## Contributing
-
-Contributions are welcome! The easiest ways to help:
-
-1. **Add an adapter** — Support a new coding CLI in `src/adapters/`
-2. **Share a workflow** — Add your YAML configs to `examples/`
-3. **Report bugs** — Open an issue with your config + error output
+Works with any tech stack — iOS, web, backend, CLI tools. The agents figure out what to do.
 
 ## License
 

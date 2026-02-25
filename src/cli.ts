@@ -4,7 +4,7 @@ import { execa } from "execa";
 import { logger } from "./utils/logger.js";
 import { createInterface } from "readline";
 
-const prompt = process.argv[2];
+const prompt = process.argv.slice(2).join(" ").trim();
 
 if (!prompt || prompt === "--help" || prompt === "-h") {
   console.log(`
@@ -19,6 +19,7 @@ if (!prompt || prompt === "--help" || prompt === "-h") {
 }
 
 const MAX_ITERATIONS = 5;
+const COMMAND_TIMEOUT_MS = 20 * 60 * 1000;
 
 // ── Claude Code (builder) ────────────────────────────────────────────
 
@@ -26,6 +27,123 @@ interface RunResult {
   output: string;
   exitCode: number;
   costUsd?: number;
+}
+
+function isApprovedReview(output: string): boolean {
+  return output
+    .split(/\r?\n/)
+    .some((line) => line.trim().toUpperCase() === "APPROVED");
+}
+
+function sanitizeCodexReviewOutput(raw: string): string {
+  const noisyLineMatchers: RegExp[] = [
+    /^OpenAI Codex v/i,
+    /^-+$/,
+    /^workdir:/i,
+    /^model:/i,
+    /^provider:/i,
+    /^approval:/i,
+    /^sandbox:/i,
+    /^reasoning effort:/i,
+    /^reasoning summaries:/i,
+    /^session id:/i,
+    /^user$/i,
+    /^assistant$/i,
+    /^system$/i,
+    /^current changes$/i,
+    /^mcp:/i,
+  ];
+
+  const kept: string[] = [];
+  let previousBlank = false;
+
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const isNoise = noisyLineMatchers.some((re) => re.test(line));
+    if (isNoise) continue;
+
+    if (line === "") {
+      if (!previousBlank) {
+        kept.push("");
+      }
+      previousBlank = true;
+      continue;
+    }
+
+    previousBlank = false;
+    kept.push(rawLine);
+  }
+
+  return kept.join("\n").trim();
+}
+
+function hasBlockingFindings(output: string): boolean {
+  const normalized = output.toLowerCase();
+
+  const positiveSignals = [
+    "no issues found",
+    "no critical issues",
+    "no actionable findings",
+    "looks good",
+    "lgtm",
+    "ship it",
+  ];
+  if (positiveSignals.some((signal) => normalized.includes(signal))) {
+    return false;
+  }
+
+  const blockingHints = [
+    /\bbug\b/,
+    /\bcrash\b/,
+    /\bsecurity\b/,
+    /\bvulnerab/,
+    /\bexploit\b/,
+    /\bregression\b/,
+    /\bincorrect\b/,
+    /\bbroken\b/,
+    /\bfail(?:ing|ed)?\b/,
+    /\bexception\b/,
+    /\bpanic\b/,
+    /\bdata loss\b/,
+    /\bauth(?:entication|orization)?\b/,
+    /\bnull pointer\b/,
+    /\bmemory leak\b/,
+    /\bdeadlock\b/,
+    /\brace condition\b/,
+    /\bsql injection\b/,
+    /\bxss\b/,
+    /\bcsrf\b/,
+    /\bcompile error\b/,
+    /\bbuild (?:fails|failed)\b/,
+  ];
+  if (blockingHints.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  const nonBlockingHints = [
+    /\bnit(?:pick)?s?\b/,
+    /\bsuggestion\b/,
+    /\boptional\b/,
+    /\bminor\b/,
+    /\bstyle\b/,
+    /\bstylistic\b/,
+    /\bformat(?:ting)?\b/,
+    /\bnaming\b/,
+    /\breadability\b/,
+    /\bpolish\b/,
+    /\bdocs?\b/,
+    /\bcomment\b/,
+    /\bconsider\b/,
+    /\bcould\b/,
+    /\bnice to have\b/,
+  ];
+  if (nonBlockingHints.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
+
+  // Conservative default: if we cannot clearly classify it as non-blocking,
+  // treat it as blocking so we do not auto-approve real issues.
+  return true;
 }
 
 async function runClaude(input: string): Promise<RunResult> {
@@ -43,6 +161,7 @@ async function runClaude(input: string): Promise<RunResult> {
   const proc = execa("claude", args, {
     cwd: process.cwd(),
     input,
+    timeout: COMMAND_TIMEOUT_MS,
     reject: false,
   });
 
@@ -118,22 +237,25 @@ async function runClaude(input: string): Promise<RunResult> {
 
 // ── Codex (reviewer) ─────────────────────────────────────────────────
 
-async function runCodexReview(originalPrompt: string): Promise<RunResult> {
-  const reviewInstructions = `The original request was: "${originalPrompt}". If the implementation is correct, complete, and has no bugs, respond with exactly: APPROVED. Otherwise, list specific issues to fix.`;
-
+async function runCodexReview(): Promise<RunResult> {
   const args = [
     "exec", "review",
     "--uncommitted",
     "--full-auto",
-    reviewInstructions,
   ];
 
   const result = await execa("codex", args, {
     cwd: process.cwd(),
+    // Some Codex versions treat piped stdin as a prompt, which conflicts
+    // with --uncommitted. Ignore stdin to keep this invocation prompt-free.
+    stdin: "ignore",
+    timeout: COMMAND_TIMEOUT_MS,
     reject: false,
   });
 
-  const output = result.stdout || result.stderr || "";
+  const rawOutput = result.stdout || result.stderr || "";
+  const cleanedOutput = sanitizeCodexReviewOutput(rawOutput);
+  const output = cleanedOutput || rawOutput;
 
   return {
     output,
@@ -147,6 +269,7 @@ logger.banner();
 const start = Date.now();
 let totalCost = 0;
 let approved = false;
+let stepsRun = 0;
 
 try {
   for (let i = 1; i <= MAX_ITERATIONS; i++) {
@@ -159,21 +282,40 @@ try {
       logger.spinnerStop();
 
       if (build.costUsd) totalCost += build.costUsd;
+      stepsRun++;
       logger.success(`Done`);
       logger.output(build.output);
+      if (build.exitCode !== 0) {
+        logger.error(`Build failed (exit ${build.exitCode})`);
+        process.exit(1);
+      }
     }
 
     // ── Review (Codex) ─────────────────────────────────────────
     logger.step("Review", i);
     logger.spinnerStart("Codex is reviewing...");
 
-    const review = await runCodexReview(prompt);
+    const review = await runCodexReview();
     logger.spinnerStop();
+    stepsRun++;
+    if (review.exitCode !== 0) {
+      logger.error(`Review failed (exit ${review.exitCode})`);
+      logger.output(review.output);
+      process.exit(1);
+    }
 
-    const isApproved = review.output.trim().toUpperCase().includes("APPROVED");
+    const isApproved = isApprovedReview(review.output);
+    const hasBlocking = hasBlockingFindings(review.output);
 
     if (isApproved) {
       logger.success("APPROVED");
+      logger.output(review.output);
+      approved = true;
+      break;
+    }
+
+    if (!hasBlocking) {
+      logger.success("No blocking issues — treating review as approved");
       logger.output(review.output);
       approved = true;
       break;
@@ -191,22 +333,33 @@ try {
     logger.step("Fix", i + 1);
     logger.spinnerStart("Claude Code is fixing...");
 
-    const fixPrompt = `Fix the following issues found during code review:
+    const fixPrompt = `Fix the following BLOCKING issues found during code review:
 
 ${review.output}
 
-The original request was: "${prompt}"`;
+The original request was: "${prompt}"
+
+Focus only on concrete correctness, security, runtime, or test failures.
+Do not spend time on optional style-only suggestions.`;
 
     const fix = await runClaude(fixPrompt);
     logger.spinnerStop();
 
     if (fix.costUsd) totalCost += fix.costUsd;
+    stepsRun++;
     logger.success("Done");
     logger.output(fix.output);
+    if (fix.exitCode !== 0) {
+      logger.error(`Fix failed (exit ${fix.exitCode})`);
+      process.exit(1);
+    }
   }
 
   const durationMs = Date.now() - start;
-  logger.summary(0, durationMs, approved, true, totalCost);
+  logger.summary(stepsRun, durationMs, approved, true, totalCost);
+  if (!approved) {
+    process.exit(1);
+  }
 } catch (err: any) {
   logger.spinnerStop();
   logger.error(err.message ?? "Execution failed");
