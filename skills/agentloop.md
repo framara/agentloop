@@ -1,138 +1,89 @@
-# AgentLooper — Project Skill
+# AgentLooper -- Project Skill
 
-Multi-agent orchestrator for AI coding CLIs. Chains Claude Code, Codex, Gemini, and any CLI into automated build → audit → fix loops via YAML config.
+Zero-config two-agent coding loop. Claude Code builds, Codex reviews, loop until approved.
 
 ## Architecture
 
 ```
 src/
-  cli.ts                  # Commander CLI — run, init, validate, cleanup
-  core/
-    schema.ts             # Zod schemas — WorkflowConfig, AgentConfig, StepConfig, LoopConfig
-    engine.ts             # Main orchestrator — loads YAML, executes steps, manages loops
-  adapters/
-    base.ts               # AgentAdapter interface + AgentResult type
-    claude-code.ts        # Claude Code adapter (JSON output, cost tracking, stdin piping)
-    codex.ts              # OpenAI Codex adapter
-    gemini.ts             # Google Gemini CLI adapter
-    custom.ts             # Universal adapter — runs any CLI via command template
-    index.ts              # Adapter registry + availability checker
+  cli.ts                  # Main entry point -- the two-agent loop
   utils/
-    git.ts                # getGitDiff (supports baseBranch for worktree mode), snapshotCommit
-    worktree.ts           # createWorktree, listWorktrees, removeWorktree
-    template.ts           # Mustache-style {{ variable }} resolver + condition evaluator
-    logger.ts             # Chalk-based structured output (steps, summaries, worktree info)
-    report.ts             # Markdown run report generator
-examples/
-  build-and-audit.yml     # Two-agent loop: build → audit → fix
-  build-test-secure.yml   # Three agents: builder, tester, security auditor
-  build-test-fix.yml      # Shell steps for lint + test, loop until tests pass
-  parallel-audit.yml      # Parallel lint + test + security audit
+    logger.ts             # Spinner with elapsed timer, step/output/summary formatting
 ```
 
-## Config Format (agentloop.yml)
+## How the CLI Works (cli.ts)
 
-```yaml
-name: workflow-name
+### Entry point
+- Takes prompt from `process.argv.slice(2).join(" ")`
+- No subcommands, no flags (except --help)
 
-agents:
-  agent_key:
-    cli: claude-code | codex | gemini | aider | custom
-    model: optional-model-override
-    allowEdits: true              # Let the agent edit files (default: read-only)
-    system: |
-      Optional system prompt
-    command: "for custom cli: any-cli --flag {{prompt}}"
+### Loop (max 5 iterations)
+1. **Build** (iteration 1 only) -- `runClaude(prompt)` with edit permissions
+2. **Review** (every iteration) -- `runCodexReview()` reads uncommitted diff
+3. **Approval check**:
+   - `isApprovedReview()` -- exact "APPROVED" on its own line
+   - `hasBlockingFindings()` -- classifies findings as blocking vs non-blocking
+   - If approved or no blocking issues -> stop
+   - If blocking -> **Fix** -- `runClaude(fixPrompt)` -> back to Review
 
-steps:
-  # Agent step — sends prompt to an AI CLI
-  - name: step-name
-    agent: agent_key
-    prompt: |
-      Supports {{ feature_spec }} and {{ steps.prev.output }}
-    context:
-      - git:diff           # Injects git diff (cumulative in worktree mode)
-      - path/to/file.ts    # Injects file contents
-
-  # Shell step — runs command directly, no agent
-  - name: test
-    run: "npm test 2>&1 || true"
-
-  # Parallel steps — consecutive parallel: true steps run concurrently
-  - name: lint
-    run: "npm run lint"
-    parallel: true
-  - name: test
-    run: "npm test"
-    parallel: true
-
-  # Loop step — repeats workflow from re-entry point
-  - name: fix
-    agent: builder
-    prompt: "Fix: {{ steps.audit.output }}"
-    loop:
-      until: steps.audit.output contains APPROVED
-      max: 5
-      on_max: fail | pause | continue
+### Claude Code invocation
 ```
+claude --print --dangerously-skip-permissions --verbose --output-format stream-json -
+```
+- Prompt piped via stdin
+- Stream-json parsed line by line for spinner updates (tool_use events)
+- Result event extracted for output text and cost_usd
+- 20-minute timeout
 
-## Key Engine Concepts
+### Codex invocation
+```
+codex exec review --uncommitted --full-auto
+```
+- stdin set to "ignore" (--uncommitted conflicts with piped input)
+- Output sanitized via `sanitizeCodexReviewOutput()` -- strips metadata lines
+- 20-minute timeout
 
-### Step Execution
-- Steps run sequentially by default
-- `parallel: true` on consecutive steps groups them for `Promise.all` execution
-- Shell steps (`run`) execute via `sh -c`, capture stdout/stderr + exit code
-- Agent steps resolve context + prompt template, then delegate to the adapter
-- All step outputs stored as `{{ steps.<name>.output }}` and `{{ steps.<name>.exitCode }}`
+### Review classification
 
-### Loop Logic
-- The engine finds the first step with `loop` config
-- The loop condition (e.g., `steps.audit.output contains APPROVED`) is parsed to find the referenced step
-- On iteration > 1, all steps before the referenced step's group are skipped (re-entry point)
-- Loop runs up to `max` iterations
+**Positive signals (non-blocking):**
+- "no issues found", "looks good", "LGTM", "ship it"
 
-### Worktree Isolation (--worktree)
-- Creates `git worktree add -b agentloop/run-<id>` in `$TMPDIR`
-- All steps execute in the worktree (user's checkout untouched)
-- Auto-commits after each step/parallel group with `agentloop: <step> (iteration N)`
-- `git:diff` context uses `git diff baseBranch...HEAD` for cumulative diff
-- Report written to original cwd, not the worktree
-- `agentloop cleanup` removes all agentloop worktrees + branches
+**Blocking keywords (trigger fix loop):**
+- bug, crash, security, vulnerability, exploit, regression, broken, failing, exception, panic, data loss, null pointer, memory leak, deadlock, race condition, SQL injection, XSS, CSRF, compile error, build failed
 
-### Adapters
-- All built-in adapters pipe prompts via stdin (avoids ARG_MAX)
-- Claude Code uses `--output-format json` to extract cost from structured response
-- `allowEdits: true` adds `--dangerously-skip-permissions` so agents can modify files (default is read-only `--print` mode)
-- Custom adapter replaces `{{prompt}}` in the command template, runs via `sh -c`
-- `aider` is an alias for the custom adapter
-- Timeout detection: adapters check `timedOut` and prefix output with `[TIMED OUT]`
+**Non-blocking keywords (treated as approved):**
+- nit, suggestion, optional, minor, style, formatting, naming, readability, polish, docs, comment, consider, could, nice to have
+
+**Default:** unclassified findings are treated as blocking (conservative).
+
+### Fix prompt
+Tells Claude Code to focus on concrete correctness/security/runtime failures, not style suggestions.
+
+## Logger (utils/logger.ts)
 
 ### Spinner
-- Braille-dot spinner shows while steps are executing (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏)
-- Writes to stderr so it doesn't mix with captured output
-- Automatically cleared when a step completes
+- Braille-dot frames
+- Shows elapsed time: `Editing file.swift (32s)`
+- `spinnerStart(text)` / `spinnerUpdate(text)` / `spinnerStop()`
+- Writes to stderr, clears line with `\r\x1b[K`
 
-### Template System
-- `{{ variable }}` — resolved from the variables map
-- Supports word chars, dots, and hyphens: `{{ steps.security-audit.output }}`
-- Conditions: `contains` (case-insensitive) and `==` (exact match)
-
-## CLI Commands
-
-```
-agentlooper run -c config.yml -s "spec" --worktree --dry-run
-agentlooper init                    # Scaffold agentloop.yml
-agentlooper validate -c config.yml  # Check config validity
-agentlooper cleanup                 # Remove agentloop worktrees/branches
-```
+### Output methods
+- `step(name, iteration)` -- `Build (iteration 1)`
+- `success(msg)` -- `Done`
+- `warn(msg)` -- `Issues found`
+- `error(msg)` -- `Failed`
+- `output(text, maxLines=20)` -- bordered box with truncation
+- `summary(steps, duration, approved, cost)` -- final status line
 
 ## Tech Stack
 - TypeScript (ES2022, Node16 module resolution)
-- commander (CLI), zod (validation), execa (process execution), yaml (parsing), chalk (output)
+- execa v9 (process execution with streaming, timeout, reject: false)
+- chalk v5 (terminal colors)
+- readline (stream-json line parsing)
 - Build: `tsc` to `dist/`, dev: `tsx src/cli.ts`
 
 ## Conventions
-- Adapters implement `AgentAdapter` interface from `base.ts`
 - All file imports use `.js` extension (Node16 ESM)
-- Errors in step execution throw (not `process.exit`) so `finally` blocks run
-- Reports go to original cwd, execution happens in effectiveCwd (which may be a worktree)
+- No config files -- everything hardcoded in cli.ts
+- Exit code 0 = approved, 1 = failure
+- Fail-fast on non-zero exit from any agent step

@@ -356,7 +356,7 @@ Do not spend time on optional style-only suggestions.`;
   }
 
   const durationMs = Date.now() - start;
-  logger.summary(stepsRun, durationMs, approved, true, totalCost);
+  logger.summary(stepsRun, durationMs, approved, totalCost);
   if (!approved) {
     process.exit(1);
   }

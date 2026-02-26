@@ -56,14 +56,6 @@ export const logger = {
     console.log(`  ${chalk.red("✖")} ${msg}`);
   },
 
-  dim(msg: string) {
-    console.log(chalk.dim(msg));
-  },
-
-  info(msg: string) {
-    console.log(`  ${chalk.blue("ℹ")} ${msg}`);
-  },
-
   output(text: string, maxLines = 20) {
     const lines = text.split("\n");
     const truncated = lines.length > maxLines;
@@ -90,29 +82,16 @@ export const logger = {
     );
   },
 
-  worktreeSummary(info: { path: string; branch: string; baseBranch: string }) {
-    console.log(`\n${chalk.bold.cyan("Worktree")}`);
-    console.log(`  Path:   ${info.path}`);
-    console.log(`  Branch: ${chalk.green(info.branch)}`);
-    console.log(``);
-    console.log(chalk.dim("  Review:  ") + `git diff ${info.baseBranch}...${info.branch}`);
-    console.log(chalk.dim("  Merge:   ") + `git merge ${info.branch}`);
-    console.log(chalk.dim("  Cleanup: ") + `git worktree remove ${info.path} && git branch -D ${info.branch}`);
-  },
-
   summary(
     stepCount: number,
     durationMs: number,
     approved: boolean,
-    hasLoop: boolean,
     totalCostUsd?: number
   ) {
     const dur = (durationMs / 1000).toFixed(1);
-    const status = !hasLoop
-      ? chalk.bold.green("COMPLETE")
-      : approved
-        ? chalk.bold.green("APPROVED")
-        : chalk.bold.yellow("MAX ITERATIONS REACHED");
+    const status = approved
+      ? chalk.bold.green("APPROVED")
+      : chalk.bold.yellow("MAX ITERATIONS REACHED");
 
     console.log(`\n${chalk.dim("─".repeat(45))}`);
     console.log(`  Status:     ${status}`);

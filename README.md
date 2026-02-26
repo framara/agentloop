@@ -33,6 +33,7 @@ agentlooper "Add Stripe billing with usage-based pricing"
 
 ─────────────────────────────────────────────
   Status:     APPROVED
+  Steps run:  4
   Duration:   124.3s
   Est. cost:  $0.28
 ─────────────────────────────────────────────
@@ -51,27 +52,52 @@ You've done this manually:
 
 AgentLooper automates the entire loop. Two agents iterate until the code is right — you just walk away.
 
-## Quick Start
+## Install
 
 ```bash
-# Install
 npm install -g agentlooper
+```
 
-# Go to your project
+### Prerequisites
+
+You need both of these AI coding CLIs installed:
+
+| Tool | Install | Role |
+|---|---|---|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm install -g @anthropic-ai/claude-code` | Builder — reads your codebase, writes and edits files |
+| [Codex CLI](https://github.com/openai/codex) | `npm install -g @openai/codex` | Reviewer — reviews the diff, finds bugs and issues |
+
+## Usage
+
+```bash
 cd your-project
 
-# Run it
 agentlooper "Add user authentication with JWT tokens"
 ```
 
-That's it. No config files. No YAML. No setup.
+That's it. No config files. No YAML. No setup. Works with any tech stack — iOS, web, backend, CLI tools. The agents figure out what to do.
 
-## Prerequisites
+You can also pass the prompt without quotes:
 
-You need both:
+```bash
+agentlooper add a settings screen with dark mode toggle
+```
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
-- [Codex CLI](https://github.com/openai/codex) — `npm install -g @openai/codex`
+### More examples
+
+```bash
+# Build a feature
+agentlooper "Add a /health endpoint that returns system status"
+
+# Fix a bug
+agentlooper "Fix the login bug where users get logged out after 5 minutes"
+
+# Refactor
+agentlooper "Refactor the database layer to use connection pooling"
+
+# iOS
+agentlooper "Add hidden contextual tags to items using Apple Intelligence"
+```
 
 ## How It Works
 
@@ -87,36 +113,76 @@ You need both:
               APPROVED
 ```
 
-1. **Build** — Claude Code implements your request (reads your codebase, writes files)
-2. **Review** — Codex reviews uncommitted changes with `codex exec review --uncommitted --full-auto`
-3. If a review line is exactly **APPROVED** → done
-4. If issues are found → **Fix** — Claude Code fixes them → back to Review
-5. Max 5 iterations
+1. **Build** — Claude Code implements your request. It reads your codebase, writes files, runs commands — whatever is needed.
+2. **Review** — Codex reviews all uncommitted changes (`codex exec review --uncommitted --full-auto`). It only reads the diff, never edits files.
+3. If **APPROVED** → done.
+4. If blocking issues found → **Fix** — Claude Code gets the feedback and fixes them → back to step 2.
+5. Max **5 iterations**, then exits with an error.
 
-The builder has full edit permissions. The reviewer is read-only and only reviews the current diff.
+### Approval logic
 
-## Runtime Rules
+AgentLooper uses a three-tier system to decide whether the review passes:
 
-- Fail-fast: if Build, Review, or Fix exits non-zero, AgentLooper stops immediately with an error.
-- Strict approval: only a standalone review line equal to `APPROVED` is treated as approval.
-- Relevance gate: suggestion-only / nit-style feedback is treated as non-blocking and does not trigger another fix loop.
-- Review output filtering: Codex session metadata and MCP chatter are stripped from displayed findings to keep feedback focused.
-- Timeout: each agent command has a 20-minute timeout.
-- Loop outcome: if no approval after 5 iterations, AgentLooper exits with a non-zero status.
+| Signal | Action |
+|---|---|
+| A review line is exactly `APPROVED` | Approved immediately |
+| Only non-blocking feedback (nits, suggestions, style, docs, formatting) | Treated as approved — no fix loop |
+| Blocking issues (bugs, crashes, security, failing builds, data loss) | Triggers a fix iteration |
 
-## What It Looks Like
+This prevents wasting iterations on cosmetic feedback while catching real issues.
 
-The spinner shows what the agent is doing in real-time:
+### Fail-fast
+
+If any step (Build, Review, or Fix) exits with a non-zero code, AgentLooper stops immediately with an error. No silent failures.
+
+### Review output filtering
+
+Codex prints session metadata (version, model, session ID, etc.) alongside its review. AgentLooper strips this noise so you only see the actual findings.
+
+### Cost tracking
+
+Claude Code reports its API cost. AgentLooper accumulates the total across all iterations and shows it in the summary. Codex costs are not currently tracked.
+
+## What the spinner shows
+
+While the agents work, the spinner shows real-time activity with an elapsed timer:
 
 ```
   ⠼ Reading Models/Item.swift (8s)
   ⠦ Writing Services/TagService.swift (24s)
   ⠧ Editing ContentView.swift (31s)
   ⠇ Running: xcodebuild -scheme App build (45s)
-  ⠏ Searching files... (52s)
+  ⠏ Searching files... (1m 12s)
+  ⠙ Thinking... (1m 30s)
 ```
 
-Works with any tech stack — iOS, web, backend, CLI tools. The agents figure out what to do.
+This is parsed from Claude Code's streaming JSON output — you see file reads, writes, edits, shell commands, searches, and thinking in real-time.
+
+## Configuration
+
+None. AgentLooper is zero-config by design.
+
+Under the hood, it runs:
+
+- **Claude Code**: `claude --print --dangerously-skip-permissions --verbose --output-format stream-json`
+- **Codex**: `codex exec review --uncommitted --full-auto`
+
+Each command has a 20-minute timeout.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Review approved (explicitly or no blocking issues) |
+| `1` | Build/Review/Fix failed, max iterations reached, or execution error |
+
+## Contributing
+
+Contributions are welcome:
+
+1. **Report bugs** — Open an issue with the error output
+2. **Improve review logic** — Better blocking/non-blocking classification
+3. **Add features** — PRs welcome
 
 ## License
 

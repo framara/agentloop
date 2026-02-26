@@ -3,4 +3,3 @@ dist/
 *.tsbuildinfo
 .DS_Store
 agentloop-report-*.md
-firebase-debug.log
